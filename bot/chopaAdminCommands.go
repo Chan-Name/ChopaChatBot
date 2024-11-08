@@ -1,117 +1,48 @@
 package bot
 
 import (
-	"fmt"
 	"log"
-	"strconv"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
-type timeForMuteBan struct {
-	Time   int
-	Period string
-}
+func (b *Bot) adminChecker(userID int, chatID int64) bool {
 
-func (b *Bot) ban(userForBan *tgbotapi.User, chat *tgbotapi.Chat, date int64) {
-
-	memberConfig := tgbotapi.ChatMemberConfig{
-		ChatID:          chat.ID,
-		ChannelUsername: chat.UserName,
-		UserID:          userForBan.ID,
-	}
-
-	kickConfig := tgbotapi.KickChatMemberConfig{
-		ChatMemberConfig: memberConfig,
-		UntilDate:        time.Now().Unix() + date,
-	}
-
-	_, err := b.bot.KickChatMember(kickConfig)
+	admins, err := b.bot.GetChatAdministrators(tgbotapi.ChatConfig{
+		ChatID: chatID,
+	})
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
+	for _, admin := range admins {
+		if userID == admin.User.ID {
+			return true
+		}
+	}
+	return false
 }
 
-func (b *Bot) mute(userForMute *tgbotapi.User, chat *tgbotapi.Chat, date int64) {
+func (b *Bot) AdminCommandsChecker(command []string, message *tgbotapi.Message) {
+	if message.ReplyToMessage != nil {
 
-	memberConfig := tgbotapi.ChatMemberConfig{
-		ChatID:          chat.ID,
-		ChannelUsername: chat.UserName,
-		UserID:          userForMute.ID,
-	}
+		switch command[0] {
+		case "мут", "Мут":
+			b.mute(message.ReplyToMessage.From, message, command)
 
-	restrictConfig := tgbotapi.RestrictChatMemberConfig{
-		ChatMemberConfig: memberConfig,
-		UntilDate:        time.Now().Unix() + date,
-	}
+		case "бан", "Бан":
+			b.ban(message.ReplyToMessage.From, message)
 
-	_, err := b.bot.RestrictChatMember(restrictConfig)
-	if err != nil {
-		log.Fatal(err)
+		case "разбан", "Разбан":
+			b.unBan(message.ReplyToMessage.From, message)
+
+		case "размут", "Размут":
+			b.unMute(message.ReplyToMessage.From, message)
+		}
 	}
 }
 
-func messageForBan(userName string, date *timeForMuteBan) string {
-	return fmt.Sprintf("@%v %v, %d, %v", userName,
-		"is banned to", date.Time, date.Period)
-}
-
-func messageForMute(userName string, date *timeForMuteBan) string {
-	return fmt.Sprintf("@%v %v, %d, %v", userName,
-		"is muted to", date.Time, date.Period)
-}
-
-func timeForMuteOrBan(command []string) timeForMuteBan {
-
-	startTime, err := strconv.Atoi(command[3])
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	switch command[3] {
-	case "минут", "минута", "минуты", "минуту":
-		return timeForMuteBan{
-			Time:   startTime * 60,
-			Period: command[3],
-		}
-
-	case "час", "часа", "часов":
-		return timeForMuteBan{
-			Time:   startTime * 3600,
-			Period: command[3],
-		}
-
-	case "день", "дня", "дней":
-		return timeForMuteBan{
-			Time:   startTime * 86400,
-			Period: command[3],
-		}
-
-	case "недель", "недели", "неделя", "неделю":
-		return timeForMuteBan{
-			Time:   startTime * 604800,
-			Period: command[3],
-		}
-
-	case "месяц", "месяца", "месяцов":
-		return timeForMuteBan{
-			Time:   (startTime * 86400) * 30,
-			Period: command[3],
-		}
-
-	case "год", "года", "лет":
-		return timeForMuteBan{
-			Time:   (startTime * 86400) * 365,
-			Period: command[3],
-		}
-
-		// default тут - заглушка, что никогда не сработает, чтобы компилятор не выдавал ошибку
-	default:
-		return timeForMuteBan{
-			Time:   0,
-			Period: "0",
-		}
-	}
+func (b *Bot) allCommandsChecker(command []string, message *tgbotapi.Message) {
+	b.chopaMessageChecker(command, message)
+	b.AdminCommandsChecker(command, message)
 }
